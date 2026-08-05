@@ -139,7 +139,7 @@ class ParallelDeepResearchCrew:
         return Crew(
             agents=self.agents,  # Automatically populated by @agent
             tasks=self.tasks,    # Automatically populated by @task
-            memory=True,
+            memory=False,
             process=Process.sequential,
             tracing=False,
             verbose=True,
