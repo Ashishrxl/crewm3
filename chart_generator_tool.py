@@ -1,15 +1,18 @@
 import os
 os.environ["MPLBACKEND"] = "Agg"
-import matplotlib
-matplotlib.use("agg")
 
-from crewai.tools import BaseTool
-from crewai import LLM
-import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
-from datetime import datetime
+
+import uuid
 import json
+import pandas as pd
+from datetime import datetime
+from crewai.tools import BaseTool
+from crewai import LLM
+
 
 class ChartGeneratorTool(BaseTool):
     name: str = "Create custom plots"
@@ -50,11 +53,14 @@ class ChartGeneratorTool(BaseTool):
             Return only the JSON array, no additional text or explanations.
             """
 
-            # Initialize Gemini model via CrewAI LLM wrapper
-            llm = LLM(model="gemini/gemini-2.0-flash")
+            # Initialize a fresh LLM instance per tool run
+            llm = LLM(
+                model="gemini/gemini-3.5-flash-lite",
+                api_key=os.getenv("GEMINI_API_KEY")
+            )
             llm_response = llm.call([{"role": "user", "content": extraction_prompt}])
 
-            # Clean the response to extract JSON
+            # Clean response text
             llm_response = str(llm_response).strip()
             if llm_response.startswith('```json'):
                 llm_response = llm_response[7:]
@@ -69,7 +75,11 @@ class ChartGeneratorTool(BaseTool):
 
             plots_created = []
 
+            # Ensure plots directory exists
+            os.makedirs("plots", exist_ok=True)
+
             for i, chart_info in enumerate(charts_data):
+                fig = None
                 try:
                     chart_type = str(chart_info.get("chart_type", "")).lower()
                     x_axis = chart_info.get("x_axis", "x")
@@ -79,40 +89,47 @@ class ChartGeneratorTool(BaseTool):
                     data = chart_info.get("data", {})
 
                     df = pd.DataFrame(data)
-
                     if df.empty:
                         continue
 
-                    plt.figure(figsize=(10, 6))
+                    # Thread-safe figure and axes creation
+                    fig, ax = plt.subplots(figsize=(10, 6))
 
                     if chart_type == "line":
-                        sns.lineplot(data=df, x=x_axis, y=y_axis, marker="o", hue=hue)
+                        sns.lineplot(data=df, x=x_axis, y=y_axis, marker="o", hue=hue, ax=ax)
                     elif chart_type in ["bar", "column"]:
-                        sns.barplot(data=df, x=x_axis, y=y_axis, hue=hue)
+                        sns.barplot(data=df, x=x_axis, y=y_axis, hue=hue, ax=ax)
                     elif chart_type == "histogram":
-                        plt.hist(df[y_axis], bins=10, alpha=0.7)
-                        plt.xlabel(y_axis)
-                        plt.ylabel("Frequency")
+                        ax.hist(df[y_axis], bins=10, alpha=0.7)
+                        ax.set_xlabel(y_axis)
+                        ax.set_ylabel("Frequency")
                     elif chart_type == "scatter":
-                        sns.scatterplot(data=df, x=x_axis, y=y_axis, hue=hue)
+                        sns.scatterplot(data=df, x=x_axis, y=y_axis, hue=hue, ax=ax)
                     elif chart_type == "pie":
-                        plt.pie(df[y_axis], labels=df[x_axis], autopct='%1.1f%%', startangle=90)
-                        plt.axis('equal')
+                        ax.pie(df[y_axis], labels=df[x_axis], autopct='%1.1f%%', startangle=90)
+                        ax.axis('equal')
 
-                    plt.title(title)
-                    plt.xticks(rotation=45)
-                    plt.tight_layout()
+                    ax.set_title(title)
+                    plt.setp(ax.get_xticklabels(), rotation=45)
+                    fig.tight_layout()
 
-                    os.makedirs("plots", exist_ok=True)
-                    filename = f"plots/plot_{i+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                    plt.savefig(filename, dpi=300, bbox_inches='tight')
-                    plt.close()
+                    # Unique filename using UUID to prevent race collisions
+                    unique_id = uuid.uuid4().hex[:6]
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                    filename = f"plots/plot_{i+1}_{timestamp}_{unique_id}.png"
 
+                    # Save figure directly from object instance
+                    fig.savefig(filename, dpi=300, bbox_inches='tight')
                     plots_created.append(filename)
 
                 except Exception as e:
                     print(f"Error creating chart {i+1}: {str(e)}")
                     continue
+
+                finally:
+                    # Clean explicit figure handle from memory safely
+                    if fig is not None:
+                        plt.close(fig)
 
             if plots_created:
                 return f"Successfully created {len(plots_created)} plots: {', '.join(plots_created)}"
