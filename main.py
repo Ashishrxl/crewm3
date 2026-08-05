@@ -9,6 +9,8 @@ import queue
 import threading
 import streamlit as st
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
+
 
 # 1. Disable Telemetry before imports
 os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
@@ -58,6 +60,7 @@ with st.sidebar:
     st.info("API keys can also be saved in `.streamlit/secrets.toml` when deploying to Streamlit Cloud.")
 
 
+
 def create_pdf(markdown_text: str) -> bytes:
     pdf = FPDF()
     pdf.add_page()
@@ -68,22 +71,44 @@ def create_pdf(markdown_text: str) -> bytes:
     for line in lines:
         clean_line = line.strip().encode('latin-1', 'replace').decode('latin-1')
 
+        # Heading 1
         if clean_line.startswith("# "):
             pdf.set_font("Helvetica", style="B", size=18)
-            pdf.cell(0, 10, txt=clean_line.replace("# ", "").strip(), ln=True)
+            pdf.cell(
+                0, 
+                10, 
+                text=clean_line.replace("# ", "").strip(), 
+                new_x=XPos.LMARGIN, 
+                new_y=YPos.NEXT
+            )
             pdf.ln(2)
+        # Heading 2
         elif clean_line.startswith("## "):
             pdf.set_font("Helvetica", style="B", size=14)
-            pdf.cell(0, 8, txt=clean_line.replace("## ", "").strip(), ln=True)
+            pdf.cell(
+                0, 
+                8, 
+                text=clean_line.replace("## ", "").strip(), 
+                new_x=XPos.LMARGIN, 
+                new_y=YPos.NEXT
+            )
             pdf.ln(2)
+        # Heading 3
         elif clean_line.startswith("### "):
             pdf.set_font("Helvetica", style="B", size=12)
-            pdf.cell(0, 6, txt=clean_line.replace("### ", "").strip(), ln=True)
+            pdf.cell(
+                0, 
+                6, 
+                text=clean_line.replace("### ", "").strip(), 
+                new_x=XPos.LMARGIN, 
+                new_y=YPos.NEXT
+            )
             pdf.ln(1)
+        # Body text / List items
         else:
             text_line = clean_line.replace("**", "").replace("__", "")
             pdf.set_font("Helvetica", size=11)
-            pdf.multi_cell(0, 6, txt=text_line)
+            pdf.multi_cell(0, 6, text=text_line)
             pdf.ln(1)
 
     return bytes(pdf.output())
