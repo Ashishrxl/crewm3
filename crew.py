@@ -29,6 +29,10 @@ class ParallelDeepResearchCrew:
             model="gemini/gemini-3.1-flash-lite",
             api_key=gemini_api_key
         )
+        self.gemini_llm2 = LLM(
+            model="gemini/gemini-3.5-flash-lite",
+            api_key=gemini_api_key
+        )
 
     # Define the agents
     @agent
@@ -47,7 +51,7 @@ class ParallelDeepResearchCrew:
                 EXASearchTool(base_url=os.getenv("EXA_BASE_URL")),
                 ScrapeWebsiteTool()
             ],
-            llm=self.gemini_llm,
+            llm=self.gemini_llm2,
             verbose=True,
             max_rpm=150,
             max_iter=15
@@ -71,7 +75,7 @@ class ParallelDeepResearchCrew:
     def report_writer(self) -> Agent:
         return Agent(
             config=self.agents_config["report_writer"],
-            llm=self.gemini_llm,
+            llm=self.gemini_llm2,
             tools=[ChartGeneratorTool()],
             verbose=True,
             max_rpm=150,
