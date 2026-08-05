@@ -1,24 +1,32 @@
 import os
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
-from crewai_tools import ScrapeWebsiteTool, EXASearchTool
+from crewai_tools import (
+    ScrapeWebsiteTool,
+    EXASearchTool
+)
 from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
 
-# Custom imports
+# Import custom tools and guardrails
 from guardrails import write_report_guardrail
 from chart_generator_tool import ChartGeneratorTool
 
+
 @CrewBase
 class ParallelDeepResearchCrew:
-    """ParallelDeepResearch crew using Gemini API"""
+    """ParallelDeepResearch crew using Google Gemini LLM"""
 
     def __init__(self):
-        # Global Gemini LLM instance for all agents
+        # Fetch GEMINI_API_KEY from environment
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        
+        # Initialize Gemini model via CrewAI LLM wrapper
         self.gemini_llm = LLM(
             model="gemini/gemini-2.0-flash",
-            api_key=os.getenv("GEMINI_API_KEY")
+            api_key=gemini_api_key
         )
 
+    # Define the agents
     @agent
     def research_planner(self) -> Agent:
         return Agent(
@@ -66,6 +74,7 @@ class ParallelDeepResearchCrew:
             max_iter=15
         )
 
+    # Define the tasks
     @task
     def create_research_plan(self) -> Task:
         return Task(
@@ -107,10 +116,12 @@ class ParallelDeepResearchCrew:
             output_file="final_report.md"
         )
 
+    # Define the crew
     @crew
     def crew(self) -> Crew:
         """Creates the ParallelDeepResearchCrew crew"""
-        # Safely include knowledge source only if file exists
+        
+        # Safely attach knowledge sources only if the file exists
         knowledge_sources = []
         if os.path.exists("user_preference.txt"):
             knowledge_sources.append(
@@ -118,8 +129,8 @@ class ParallelDeepResearchCrew:
             )
 
         return Crew(
-            agents=self.agents,
-            tasks=self.tasks,
+            agents=self.agents,  # Automatically created by the @agent decorator
+            tasks=self.tasks,    # Automatically created by the @task decorator
             memory=True,
             process=Process.sequential,
             tracing=False,
