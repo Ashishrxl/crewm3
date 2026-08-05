@@ -5,6 +5,18 @@ import io
 import re
 import streamlit as st
 from fpdf import FPDF
+import logging
+
+# 1. Disable CrewAI Telemetry & Tracing
+os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
+os.environ["OTEL_SDK_DISABLED"] = "true"
+os.environ["POSTHOG_DISABLED"] = "true"
+
+# 2. Suppress noisy telemetry loggers
+logging.getLogger("opentelemetry").setLevel(logging.ERROR)
+logging.getLogger("crewai.telemetry").setLevel(logging.ERROR)
+
+
 
 # Configure Page
 st.set_page_config(page_title="Parallel Deep Research Crew", layout="wide")
