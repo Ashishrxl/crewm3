@@ -13,7 +13,10 @@ from chart_generator_tool import ChartGeneratorTool
 from utils import get_exa_api_key
 
 # import the knowledge source
-from text_file_knowledge_source import TextFileKnowledgeSource
+# from text_file_knowledge_source import TextFileKnowledgeSource
+
+from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
+
 
 # set the exa API key
 os.environ["EXA_API_KEY"] = get_exa_api_key()
