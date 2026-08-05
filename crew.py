@@ -1,7 +1,7 @@
 import os
 
 # Disable CrewAI telemetry to prevent thread signal errors in Streamlit
-os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
+
 
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
