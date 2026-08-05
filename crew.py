@@ -5,11 +5,20 @@ from crewai_tools import (
     ScrapeWebsiteTool,
     EXASearchTool
 )
+import yaml
 from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
 
 # Import custom tools and guardrails
 from guardrails import write_report_guardrail
 from chart_generator_tool import ChartGeneratorTool
+
+
+with open('agents.yaml', 'r') as file:
+        agent_config = yaml.safe_load(file)
+
+with open('tasks.yaml', 'r') as file:
+    task_config = yaml.safe_load(file)
+
 
 
 @CrewBase
