@@ -4,3 +4,4 @@ crewai-tools
 python-dotenv
 pysbd
 matplotlib
+seaborn
