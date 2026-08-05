@@ -3,3 +3,4 @@ crewai
 crewai-tools
 python-dotenv
 pysbd
+matplotlib
