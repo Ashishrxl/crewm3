@@ -14,10 +14,10 @@ dependencies = [
 
 [project.scripts]
 deep_research_crew = "deep_research_crew.main:run"
-run_crew = "deep_research_crew.main:run"
-train = "deep_research_crew.main:train"
-replay = "deep_research_crew.main:replay"
-test = "deep_research_crew.main:test"
+run_crew = "main:run"
+train = "main:train"
+replay = "main:replay"
+test = "main:test"
 
 [build-system]
 requires = ["hatchling"]
