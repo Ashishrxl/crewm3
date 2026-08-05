@@ -17,8 +17,8 @@ class ParallelDeepResearchCrew:
     """ParallelDeepResearch crew using Google Gemini LLM"""
 
     # Declare config file paths as class attributes for @CrewBase
-    agents_config = 'config/agents.yaml'  # change to 'config/agents.yaml' if inside a config directory
-    tasks_config = 'config/tasks.yaml'    # change to 'config/tasks.yaml' if inside a config directory
+    agents_config = 'agents.yaml'  # change to 'config/agents.yaml' if inside a config directory
+    tasks_config = 'tasks.yaml'    # change to 'config/tasks.yaml' if inside a config directory
 
     def __init__(self):
         # Fetch GEMINI_API_KEY from environment
