@@ -5,7 +5,6 @@ from crewai_tools import (
     ScrapeWebsiteTool,
     EXASearchTool
 )
-import yaml
 from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
 
 # Import custom tools and guardrails
@@ -13,25 +12,21 @@ from guardrails import write_report_guardrail
 from chart_generator_tool import ChartGeneratorTool
 
 
-with open('agents.yaml', 'r') as file:
-        agents_config = yaml.safe_load(file)
-
-with open('tasks.yaml', 'r') as file:
-    tasks_config = yaml.safe_load(file)
-
-
-
 @CrewBase
 class ParallelDeepResearchCrew:
     """ParallelDeepResearch crew using Google Gemini LLM"""
 
+    # Declare config file paths as class attributes for @CrewBase
+    agents_config = 'agents.yaml'  # change to 'config/agents.yaml' if inside a config directory
+    tasks_config = 'tasks.yaml'    # change to 'config/tasks.yaml' if inside a config directory
+
     def __init__(self):
         # Fetch GEMINI_API_KEY from environment
         gemini_api_key = os.getenv("GEMINI_API_KEY")
-        
+
         # Initialize Gemini model via CrewAI LLM wrapper
         self.gemini_llm = LLM(
-            model="gemini/gemini-3.1-flash-lite",
+            model="gemini/gemini-2.0-flash",
             api_key=gemini_api_key
         )
 
@@ -129,7 +124,7 @@ class ParallelDeepResearchCrew:
     @crew
     def crew(self) -> Crew:
         """Creates the ParallelDeepResearchCrew crew"""
-        
+
         # Safely attach knowledge sources only if the file exists
         knowledge_sources = []
         if os.path.exists("user_preference.txt"):
@@ -138,8 +133,8 @@ class ParallelDeepResearchCrew:
             )
 
         return Crew(
-            agents=self.agents,  # Automatically created by the @agent decorator
-            tasks=self.tasks,    # Automatically created by the @task decorator
+            agents=self.agents,  # Automatically populated by @agent
+            tasks=self.tasks,    # Automatically populated by @task
             memory=True,
             process=Process.sequential,
             tracing=False,
