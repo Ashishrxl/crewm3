@@ -6,14 +6,14 @@ from crewai_tools import (
 	EXASearchTool
 )
 # import the guardrail
-from deep_research_crew.guardrails.guardrails import write_report_guardrail
+from guardrails import write_report_guardrail
 # import custom tool
-from deep_research_crew.tools.chart_generator_tool import ChartGeneratorTool
+from chart_generator_tool import ChartGeneratorTool
 
-from deep_research_crew.utils import get_exa_api_key
+from utils import get_exa_api_key
 
 # import the knowledge source
-from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
+from text_file_knowledge_source import TextFileKnowledgeSource
 
 # set the exa API key
 os.environ["EXA_API_KEY"] = get_exa_api_key()
