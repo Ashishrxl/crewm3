@@ -3,20 +3,19 @@ import sys
 import glob
 import io
 import re
+import logging
 import streamlit as st
 from fpdf import FPDF
-import logging
 
 # 1. Disable CrewAI Telemetry & Tracing
 os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["POSTHOG_DISABLED"] = "true"
 
-# 2. Suppress noisy telemetry loggers
-logging.getLogger("opentelemetry").setLevel(logging.ERROR)
-logging.getLogger("crewai.telemetry").setLevel(logging.ERROR)
-
-
+# 2. Suppress noisy telemetry and event loggers
+logging.getLogger("opentelemetry").setLevel(logging.CRITICAL)
+logging.getLogger("crewai.telemetry").setLevel(logging.CRITICAL)
+logging.getLogger("crewai.events").setLevel(logging.CRITICAL)
 
 # Configure Page
 st.set_page_config(page_title="Parallel Deep Research Crew", layout="wide")
@@ -34,7 +33,7 @@ with st.sidebar:
         gemini_key = st.text_input("Enter Gemini API Key:", type="password")
     if not exa_key:
         exa_key = st.text_input("Enter EXA API Key:", type="password")
-    
+
     st.info("API keys can also be saved in `.streamlit/secrets.toml` when deploying to Streamlit Cloud.")
 
 
@@ -67,12 +66,15 @@ def create_pdf(markdown_text: str) -> bytes:
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Helvetica", size=11)
-    
+
     # Process text line by line to handle headers and body text cleanly
     lines = markdown_text.split("\n")
     for line in lines:
         clean_line = line.strip()
-        
+
+        # Sanitize text for standard Latin-1 PDF encoding
+        clean_line = clean_line.encode('latin-1', 'replace').decode('latin-1')
+
         # Heading 1
         if clean_line.startswith("# "):
             pdf.set_font("Helvetica", style="B", size=18)
@@ -95,7 +97,7 @@ def create_pdf(markdown_text: str) -> bytes:
             pdf.set_font("Helvetica", size=11)
             pdf.multi_cell(0, 6, txt=text_line)
             pdf.ln(1)
-            
+
     return bytes(pdf.output())
 
 
@@ -115,7 +117,7 @@ if st.button("Start Deep Research", type="primary"):
         # Set Environment Variables for CrewAI & EXA
         os.environ["GEMINI_API_KEY"] = gemini_key
         os.environ["EXA_API_KEY"] = exa_key
-        
+
         # Import Crew dynamically after env vars are populated
         from crew import ParallelDeepResearchCrew
 
@@ -131,7 +133,7 @@ if st.button("Start Deep Research", type="primary"):
             # Execute Crew process
             crew_obj = ParallelDeepResearchCrew().crew()
             result = crew_obj.kickoff(inputs={"user_query": user_query})
-            
+
             status_box.update(label="✅ Research Execution Complete!", state="complete", expanded=False)
             st.success("Research completed successfully!")
 
@@ -189,5 +191,5 @@ if st.button("Start Deep Research", type="primary"):
             st.error(f"An error occurred during execution: {str(e)}")
 
         finally:
-            # Restore standard stdout after execution completes
+            # Always restore standard stdout after execution completes or fails
             sys.stdout = sys_stdout_orig
