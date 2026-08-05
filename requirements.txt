@@ -1,6 +1,7 @@
 streamlit
-crewai
+crewai[google-genai]
 crewai-tools
+google-genai
 python-dotenv
 pysbd
 matplotlib
