@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-deep_research_crew = "deep_research_crew.main:run"
+deep_research_crew = "main:run"
 run_crew = "main:run"
 train = "main:train"
 replay = "main:replay"
