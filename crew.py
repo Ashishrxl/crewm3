@@ -26,7 +26,7 @@ class ParallelDeepResearchCrew:
 
         # Initialize Gemini model via CrewAI LLM wrapper
         self.gemini_llm = LLM(
-            model="gemini/gemini-2.0-flash",
+            model="gemini/gemini-3.1-flash-lite",
             api_key=gemini_api_key
         )
 
