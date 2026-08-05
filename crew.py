@@ -14,10 +14,10 @@ from chart_generator_tool import ChartGeneratorTool
 
 
 with open('agents.yaml', 'r') as file:
-        agent_config = yaml.safe_load(file)
+        agents_config = yaml.safe_load(file)
 
 with open('tasks.yaml', 'r') as file:
-    task_config = yaml.safe_load(file)
+    tasks_config = yaml.safe_load(file)
 
 
 
@@ -31,7 +31,7 @@ class ParallelDeepResearchCrew:
         
         # Initialize Gemini model via CrewAI LLM wrapper
         self.gemini_llm = LLM(
-            model="gemini/gemini-2.0-flash",
+            model="gemini/gemini-3.1-flash-lite",
             api_key=gemini_api_key
         )
 
