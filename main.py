@@ -3,19 +3,41 @@ import sys
 import glob
 import io
 import re
+import time
 import logging
+import queue
+import threading
 import streamlit as st
 from fpdf import FPDF
 
-# 1. Disable CrewAI Telemetry & Tracing
+# 1. Disable Telemetry before imports
 os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["POSTHOG_DISABLED"] = "true"
 
-# 2. Suppress noisy telemetry and event loggers
 logging.getLogger("opentelemetry").setLevel(logging.CRITICAL)
 logging.getLogger("crewai.telemetry").setLevel(logging.CRITICAL)
 logging.getLogger("crewai.events").setLevel(logging.CRITICAL)
+
+# --- Thread-Safe Queue Stream Writer ---
+class QueueStream(io.StringIO):
+    """
+    Redirects stdout prints into a thread-safe Queue for real-time polling.
+    """
+    def __init__(self, log_queue):
+        super().__init__()
+        self.log_queue = log_queue
+
+    def write(self, s):
+        if s:
+            cleaned_str = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', s)
+            if cleaned_str:
+                self.log_queue.put(cleaned_str)
+        return super().write(s)
+
+    def flush(self):
+        pass
+
 
 # Configure Page
 st.set_page_config(page_title="Parallel Deep Research Crew", layout="wide")
@@ -23,7 +45,6 @@ st.set_page_config(page_title="Parallel Deep Research Crew", layout="wide")
 st.title("🔬 Parallel Deep Research Crew")
 st.markdown("Automated research, fact-checking, and report creation powered by CrewAI & Gemini.")
 
-# Load Keys from Streamlit Secrets or Sidebar Input
 gemini_key = st.secrets.get("GEMINI_API_KEY", "")
 exa_key = st.secrets.get("EXA_API_KEY", "")
 
@@ -37,62 +58,29 @@ with st.sidebar:
     st.info("API keys can also be saved in `.streamlit/secrets.toml` when deploying to Streamlit Cloud.")
 
 
-class StreamToStreamlit(io.StringIO):
-    """
-    Custom stream capture class that strips ANSI color codes 
-    and updates a Streamlit code container live.
-    """
-    def __init__(self, st_container):
-        super().__init__()
-        self.st_container = st_container
-        self.buffer = []
-
-    def write(self, s):
-        # Strip ANSI control sequences (colors, formatting)
-        cleaned_str = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', s)
-        self.buffer.append(cleaned_str)
-        # Update Streamlit code widget with full accumulated log buffer
-        self.st_container.code("".join(self.buffer), language="bash")
-
-    def flush(self):
-        pass
-
-
 def create_pdf(markdown_text: str) -> bytes:
-    """
-    Converts plain markdown text into a clean PDF document byte string using fpdf2.
-    """
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Helvetica", size=11)
 
-    # Process text line by line to handle headers and body text cleanly
     lines = markdown_text.split("\n")
     for line in lines:
-        clean_line = line.strip()
+        clean_line = line.strip().encode('latin-1', 'replace').decode('latin-1')
 
-        # Sanitize text for standard Latin-1 PDF encoding
-        clean_line = clean_line.encode('latin-1', 'replace').decode('latin-1')
-
-        # Heading 1
         if clean_line.startswith("# "):
             pdf.set_font("Helvetica", style="B", size=18)
             pdf.cell(0, 10, txt=clean_line.replace("# ", "").strip(), ln=True)
             pdf.ln(2)
-        # Heading 2
         elif clean_line.startswith("## "):
             pdf.set_font("Helvetica", style="B", size=14)
             pdf.cell(0, 8, txt=clean_line.replace("## ", "").strip(), ln=True)
             pdf.ln(2)
-        # Heading 3
         elif clean_line.startswith("### "):
             pdf.set_font("Helvetica", style="B", size=12)
             pdf.cell(0, 6, txt=clean_line.replace("### ", "").strip(), ln=True)
             pdf.ln(1)
-        # Body text / List items
         else:
-            # Strip simple bold markdown stars for basic rendering
             text_line = clean_line.replace("**", "").replace("__", "")
             pdf.set_font("Helvetica", size=11)
             pdf.multi_cell(0, 6, txt=text_line)
@@ -101,7 +89,6 @@ def create_pdf(markdown_text: str) -> bytes:
     return bytes(pdf.output())
 
 
-# User Query Input
 user_query = st.text_area(
     "Enter your research topic/query:", 
     height=100, 
@@ -114,30 +101,68 @@ if st.button("Start Deep Research", type="primary"):
     elif not user_query.strip():
         st.warning("Please enter a research topic.")
     else:
-        # Set Environment Variables for CrewAI & EXA
         os.environ["GEMINI_API_KEY"] = gemini_key
         os.environ["EXA_API_KEY"] = exa_key
 
-        # Import Crew dynamically after env vars are populated
         from crew import ParallelDeepResearchCrew
 
-        # Streamlit status container to show live execution steps
         status_box = st.status("🚀 Running Deep Research Crew...", expanded=True)
         log_container = status_box.empty()
 
-        # Redirect standard output (sys.stdout) to custom Streamlit stream
-        sys_stdout_orig = sys.stdout
-        sys.stdout = StreamToStreamlit(log_container)
+        # Thread-safe queue to pass log strings from background thread to Streamlit
+        log_queue = queue.Queue()
+        accumulated_logs = []
 
-        try:
-            # Execute Crew process
-            crew_obj = ParallelDeepResearchCrew().crew()
-            result = crew_obj.kickoff(inputs={"user_query": user_query})
+        # Container for execution results across threads
+        execution_result = {"result": None, "error": None}
 
+        def run_crew_in_thread():
+            """Worker thread function to execute CrewAI without blocking UI."""
+            sys_stdout_orig = sys.stdout
+            sys.stdout = QueueStream(log_queue)
+            try:
+                crew_obj = ParallelDeepResearchCrew().crew()
+                execution_result["result"] = crew_obj.kickoff(inputs={"user_query": user_query})
+            except Exception as thread_err:
+                execution_result["error"] = thread_err
+            finally:
+                sys.stdout = sys_stdout_orig
+
+        # Start background thread
+        crew_thread = threading.Thread(target=run_crew_in_thread)
+        crew_thread.start()
+
+        # --- Real-Time Polling Loop on Main Thread ---
+        while crew_thread.is_alive() or not log_queue.empty():
+            updated = False
+            while not log_queue.empty():
+                log_chunk = log_queue.get()
+                accumulated_logs.append(log_chunk)
+                updated = True
+
+            # Update Streamlit code block in real time
+            if updated and accumulated_logs:
+                full_log_text = "".join(accumulated_logs)
+                # Keep last 2500 chars visible during live execution to prevent lag
+                visible_log = full_log_text[-2500:] if len(full_log_text) > 2500 else full_log_text
+                log_container.code(visible_log, language="bash")
+
+            time.sleep(0.1)
+
+        crew_thread.join()
+
+        # Handle Execution Results
+        if execution_result["error"]:
+            status_box.update(label="❌ Execution Failed!", state="error", expanded=True)
+            st.error(f"An error occurred during execution: {str(execution_result['error'])}")
+            if accumulated_logs:
+                st.subheader("📋 Error Logs")
+                st.code("".join(accumulated_logs), language="bash")
+        else:
             status_box.update(label="✅ Research Execution Complete!", state="complete", expanded=False)
             st.success("Research completed successfully!")
 
-            # Retrieve report content
+            result = execution_result["result"]
             report_content = ""
             if os.path.exists("final_report.md"):
                 with open("final_report.md", "r", encoding="utf-8") as f:
@@ -145,11 +170,14 @@ if st.button("Start Deep Research", type="primary"):
             else:
                 report_content = str(result)
 
-            # Render Final Report
             st.subheader("📄 Final Research Report")
             st.markdown(report_content)
 
-            # --- Download Buttons Section ---
+            # Full Log View
+            with st.expander("📋 View Full Real-Time Console Logs", expanded=False):
+                st.code("".join(accumulated_logs), language="bash")
+
+            # Downloads
             st.markdown("---")
             st.subheader("📥 Download Report")
             col1, col2 = st.columns(2)
@@ -176,7 +204,7 @@ if st.button("Start Deep Research", type="primary"):
                 except Exception as pdf_err:
                     st.warning(f"Unable to generate PDF: {str(pdf_err)}")
 
-            # Render Generated Plots if created by ChartGeneratorTool
+            # Visualizations
             plot_files = glob.glob("plots/*.png")
             if plot_files:
                 st.markdown("---")
@@ -185,11 +213,3 @@ if st.button("Start Deep Research", type="primary"):
                 for idx, plot_path in enumerate(plot_files):
                     col = cols[idx % 2]
                     col.image(plot_path, use_container_width=True)
-
-        except Exception as e:
-            status_box.update(label="❌ Execution Failed!", state="error", expanded=True)
-            st.error(f"An error occurred during execution: {str(e)}")
-
-        finally:
-            # Always restore standard stdout after execution completes or fails
-            sys.stdout = sys_stdout_orig
