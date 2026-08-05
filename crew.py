@@ -19,7 +19,7 @@ from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledge
 
 
 # set the exa API key
-os.environ["EXA_API_KEY"] = get_exa_api_key()
+os.environ["EXA_API_KEY"] = st.secrets.get("EXA_API_KEY")
 
 @CrewBase
 class ParallelDeepResearchCrew:
