@@ -1,173 +1,128 @@
 import os
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
-from crewai_tools import (
-	ScrapeWebsiteTool,
-	EXASearchTool
-)
-# import the guardrail
-from guardrails import write_report_guardrail
-# import custom tool
-from chart_generator_tool import ChartGeneratorTool
-
-from utils import get_exa_api_key
-
-# import the knowledge source
-# from text_file_knowledge_source import TextFileKnowledgeSource
-
+from crewai_tools import ScrapeWebsiteTool, EXASearchTool
 from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
 
-
-# set the exa API key
-os.environ["EXA_API_KEY"] = st.secrets.get("EXA_API_KEY")
+# Custom imports
+from guardrails import write_report_guardrail
+from chart_generator_tool import ChartGeneratorTool
 
 @CrewBase
 class ParallelDeepResearchCrew:
-    """ParallelDeepResearch crew"""
+    """ParallelDeepResearch crew using Gemini API"""
 
-    # Define the agents
+    def __init__(self):
+        # Global Gemini LLM instance for all agents
+        self.gemini_llm = LLM(
+            model="gemini/gemini-2.0-flash",
+            api_key=os.getenv("GEMINI_API_KEY")
+        )
+
     @agent
     def research_planner(self) -> Agent:
         return Agent(
             config=self.agents_config["research_planner"],
-            llm='gpt-4o-mini',
+            llm=self.gemini_llm,
             verbose=True
         )
 
     @agent
     def topic_researcher(self) -> Agent:
-
         return Agent(
             config=self.agents_config["topic_researcher"],
-
-            ### START CODE HERE ### 
-            # Define the tools 
             tools=[
-                # add the EXASearchTool
-				EXASearchTool(base_url=os.getenv("EXA_BASE_URL")),
-                # add the web scraping tool
+                EXASearchTool(base_url=os.getenv("EXA_BASE_URL")),
                 ScrapeWebsiteTool()
             ],
-            ### END CODE HERE ###
-
-            # set the llm for the task.
-            llm='gpt-4o-mini',
+            llm=self.gemini_llm,
             verbose=True,
             max_rpm=150,
             max_iter=15
         )
-    
+
     @agent
     def fact_checker(self) -> Agent:
-        
         return Agent(
             config=self.agents_config["fact_checker"],
-            ### START CODE HERE ### 
-            # Define the tools 
             tools=[
-                # add the EXASearchTool
-				EXASearchTool(base_url=os.getenv("EXA_BASE_URL")),
-                # add the web scraping tool
+                EXASearchTool(base_url=os.getenv("EXA_BASE_URL")),
                 ScrapeWebsiteTool()
             ],
-            ### END CODE HERE ###
-            llm='gpt-4o-mini',
+            llm=self.gemini_llm,
             verbose=True,
             max_rpm=150,
             max_iter=15
         )
-    
-    
+
     @agent
     def report_writer(self) -> Agent:
-        
         return Agent(
             config=self.agents_config["report_writer"],
-            llm='gpt-4o-mini',
-            ### START CODE HERE ###
-            # Add the instance of the custom ChartGeneratorTool
+            llm=self.gemini_llm,
             tools=[ChartGeneratorTool()],
-            ### END CODE HERE ###
             verbose=True,
             max_rpm=150,
             max_iter=15
         )
-    
+
     @task
     def create_research_plan(self) -> Task:
         return Task(
             config=self.tasks_config["create_research_plan"],
         )
-    
 
-    # Define the tasks
     @task
     def research_main_topics(self) -> Task:
         return Task(
             config=self.tasks_config["research_main_topics"],
-
-            ### START CODE HERE ###
-            # set the execution to async so the research tasks run in parallel
             async_execution=True,
-            ### END CODE HERE ###
         )
-    
+
     @task
     def research_secondary_topics(self) -> Task:
         return Task(
             config=self.tasks_config["research_secondary_topics"],
-            
-            ### START CODE HERE ###
-            # set the execution to async so the research tasks run in parallel
             async_execution=True,
-            ### END CODE HERE ###
         )
-    
+
     @task
     def validate_main_topics(self) -> Task:
         return Task(
             config=self.tasks_config["validate_main_topics"],
         )
-    
+
     @task
     def validate_secondary_topics(self) -> Task:
         return Task(
             config=self.tasks_config["validate_secondary_topics"],
         )
-    
+
     @task
     def write_final_report(self) -> Task:
         return Task(
             config=self.tasks_config["write_final_report"],
-            
-        ### START CODE HERE ###
-        # add the guardrail
-        guardrails=[write_report_guardrail],
-        # enable markdown output
-        markdown_output=True,
-        # set the output file name to "final_report.md"
-        output_file="final_report.md"
-        ### END CODE HERE ###
+            guardrails=[write_report_guardrail],
+            markdown_output=True,
+            output_file="final_report.md"
         )
 
-
-    # Define the crew
     @crew
     def crew(self) -> Crew:
         """Creates the ParallelDeepResearchCrew crew"""
+        # Safely include knowledge source only if file exists
+        knowledge_sources = []
+        if os.path.exists("user_preference.txt"):
+            knowledge_sources.append(
+                TextFileKnowledgeSource(file_paths=["user_preference.txt"])
+            )
+
         return Crew(
-            agents=self.agents,  # Automatically created by the @agent decorator
-            tasks=self.tasks,  # Automatically created by the @task decorator
-            
-            ### START CODE HERE ###
-            # allow crew to use memory to store memories of it's execution
+            agents=self.agents,
+            tasks=self.tasks,
             memory=True,
-            # Define the sequential process
             process=Process.sequential,
-            ### END CODE HERE ###
-            tracing=False, # please, do not change this value
+            tracing=False,
             verbose=True,
-            knowledge_sources=[TextFileKnowledgeSource(
-                file_paths=["user_preference.txt"]
-            )]
+            knowledge_sources=knowledge_sources
         )
