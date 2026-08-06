@@ -84,7 +84,7 @@ class ParallelDeepResearchCrew:
     def report_writer(self) -> Agent:
         return Agent(
             config=self.agents_config["report_writer"],
-            llm=self.gemini_llm2,
+            llm=self.gemini_llm,
             tools=[ChartGeneratorTool()],
             verbose=True,
             max_rpm=10,
