@@ -1,7 +1,7 @@
 import os
 
 # Disable CrewAI telemetry to prevent thread signal errors in Streamlit
-
+os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
@@ -28,14 +28,18 @@ class ParallelDeepResearchCrew:
         # Fetch GEMINI_API_KEY from environment
         gemini_api_key = os.getenv("GEMINI_API_KEY")
 
-        # Initialize Gemini model via CrewAI LLM wrapper
+        # Initialize Gemini model via CrewAI LLM wrapper with retry & backoff safeguards
         self.gemini_llm = LLM(
             model="gemini/gemini-3.1-flash-lite",
-            api_key=gemini_api_key
+            api_key=gemini_api_key,
+            max_retries=5,     # Automatically wait and retry on transient/429 errors
+            timeout=120        # Allow backoff windows during retries
         )
         self.gemini_llm2 = LLM(
             model="gemini/gemini-3.5-flash-lite",
-            api_key=gemini_api_key
+            api_key=gemini_api_key,
+            max_retries=5,     # Automatically wait and retry on transient/429 errors
+            timeout=120        # Allow backoff windows during retries
         )
 
     # Define the agents
@@ -44,7 +48,8 @@ class ParallelDeepResearchCrew:
         return Agent(
             config=self.agents_config["research_planner"],
             llm=self.gemini_llm,
-            verbose=True
+            verbose=True,
+            max_rpm=10
         )
 
     @agent
@@ -57,7 +62,7 @@ class ParallelDeepResearchCrew:
             ],
             llm=self.gemini_llm2,
             verbose=True,
-            max_rpm=150,
+            max_rpm=10,
             max_iter=15
         )
 
@@ -71,7 +76,7 @@ class ParallelDeepResearchCrew:
             ],
             llm=self.gemini_llm,
             verbose=True,
-            max_rpm=150,
+            max_rpm=10,
             max_iter=15
         )
 
@@ -82,7 +87,7 @@ class ParallelDeepResearchCrew:
             llm=self.gemini_llm2,
             tools=[ChartGeneratorTool()],
             verbose=True,
-            max_rpm=150,
+            max_rpm=10,
             max_iter=15
         )
 
@@ -146,6 +151,7 @@ class ParallelDeepResearchCrew:
             memory=False,
             process=Process.sequential,
             tracing=False,
+            max_rpm=10,          # Limits total requests across parallel tasks
             verbose=True,
             knowledge_sources=knowledge_sources
         )
