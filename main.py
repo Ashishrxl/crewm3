@@ -60,7 +60,6 @@ with st.sidebar:
     st.info("API keys can also be saved in `.streamlit/secrets.toml` when deploying to Streamlit Cloud.")
 
 
-
 def create_pdf(markdown_text: str) -> bytes:
     pdf = FPDF()
     pdf.add_page()
@@ -114,6 +113,17 @@ def create_pdf(markdown_text: str) -> bytes:
     return bytes(pdf.output())
 
 
+# --- Initialize Session State for UI Persistence ---
+if "research_complete" not in st.session_state:
+    st.session_state.research_complete = False
+if "report_content" not in st.session_state:
+    st.session_state.report_content = ""
+if "accumulated_logs" not in st.session_state:
+    st.session_state.accumulated_logs = ""
+if "plot_files" not in st.session_state:
+    st.session_state.plot_files = []
+
+
 user_query = st.text_area(
     "Enter your research topic/query:", 
     height=100, 
@@ -126,6 +136,12 @@ if st.button("Start Deep Research", type="primary"):
     elif not user_query.strip():
         st.warning("Please enter a research topic.")
     else:
+        # Reset state for fresh run
+        st.session_state.research_complete = False
+        st.session_state.report_content = ""
+        st.session_state.accumulated_logs = ""
+        st.session_state.plot_files = []
+
         os.environ["GEMINI_API_KEY"] = gemini_key
         os.environ["EXA_API_KEY"] = exa_key
 
@@ -195,46 +211,55 @@ if st.button("Start Deep Research", type="primary"):
             else:
                 report_content = str(result)
 
-            st.subheader("📄 Final Research Report")
-            st.markdown(report_content)
+            # Persist results in st.session_state so they survive download reruns
+            st.session_state.report_content = report_content
+            st.session_state.accumulated_logs = "".join(accumulated_logs)
+            st.session_state.plot_files = glob.glob("plots/*.png")
+            st.session_state.research_complete = True
 
-            # Full Log View
-            with st.expander("📋 View Full Real-Time Console Logs", expanded=False):
-                st.code("".join(accumulated_logs), language="bash")
 
-            # Downloads
-            st.markdown("---")
-            st.subheader("📥 Download Report")
-            col1, col2 = st.columns(2)
+# --- Persistent Display Section (Runs outside the start button condition) ---
+if st.session_state.research_complete:
+    st.subheader("📄 Final Research Report")
+    st.markdown(st.session_state.report_content)
 
-            with col1:
-                st.download_button(
-                    label="📄 Download Markdown (.md)",
-                    data=report_content,
-                    file_name="final_research_report.md",
-                    mime="text/markdown",
-                    use_container_width=True
-                )
+    # Full Log View
+    if st.session_state.accumulated_logs:
+        with st.expander("📋 View Full Real-Time Console Logs", expanded=False):
+            st.code(st.session_state.accumulated_logs, language="bash")
 
-            with col2:
-                try:
-                    pdf_data = create_pdf(report_content)
-                    st.download_button(
-                        label="📕 Download PDF (.pdf)",
-                        data=pdf_data,
-                        file_name="final_research_report.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                except Exception as pdf_err:
-                    st.warning(f"Unable to generate PDF: {str(pdf_err)}")
+    # Downloads
+    st.markdown("---")
+    st.subheader("📥 Download Report")
+    col1, col2 = st.columns(2)
 
-            # Visualizations
-            plot_files = glob.glob("plots/*.png")
-            if plot_files:
-                st.markdown("---")
-                st.subheader("📊 Generated Visualizations")
-                cols = st.columns(min(len(plot_files), 2))
-                for idx, plot_path in enumerate(plot_files):
-                    col = cols[idx % 2]
-                    col.image(plot_path, use_container_width=True)
+    with col1:
+        st.download_button(
+            label="📄 Download Markdown (.md)",
+            data=st.session_state.report_content,
+            file_name="final_research_report.md",
+            mime="text/markdown",
+            use_container_width=True
+        )
+
+    with col2:
+        try:
+            pdf_data = create_pdf(st.session_state.report_content)
+            st.download_button(
+                label="📕 Download PDF (.pdf)",
+                data=pdf_data,
+                file_name="final_research_report.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as pdf_err:
+            st.warning(f"Unable to generate PDF: {str(pdf_err)}")
+
+    # Visualizations
+    if st.session_state.plot_files:
+        st.markdown("---")
+        st.subheader("📊 Generated Visualizations")
+        cols = st.columns(min(len(st.session_state.plot_files), 2))
+        for idx, plot_path in enumerate(st.session_state.plot_files):
+            col = cols[idx % 2]
+            col.image(plot_path, use_container_width=True)
